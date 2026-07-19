@@ -574,13 +574,14 @@ const DEFAULT_RATE=0.85, DEFAULT_PITCH=1.15;
 const UA = navigator.userAgent||'';
 const IS_IOS = /iPhone|iPad|iPod/i.test(UA) || (navigator.platform==='MacIntel' && navigator.maxTouchPoints>1);
 const IS_ANDROID = /Android/i.test(UA);
-const IS_MOBILE = IS_IOS || IS_ANDROID;
+const IS_MOBILE = IS_IOS || IS_ANDROID || /Mobile|webOS|Opera Mini|IEMobile/i.test(UA);
 const IS_EDGE = /Edg\//i.test(UA);
-// Chrome desktop is the one browser that often needs a short gap after cancel().
-// Edge + mobile must speak inside the user-gesture chain or Hear it stays silent.
-// <!-- tts-fix-v2 20260719 -->
+// <!-- tts-fix-v3 20260719 -->
+// Edge (esp. Android) and many mobile/WebViews have broken or empty speechSynthesis
+// voices. Use HTML5 Audio TTS there. Keep Web Speech for desktop Chrome only.
+const USE_AUDIO_TTS = IS_EDGE || IS_MOBILE || !('speechSynthesis' in window);
 const CHROME_DESKTOP_GAP = /Chrome\//i.test(UA) && !IS_EDGE && !IS_MOBILE;
-let voice=null, audioOff = !('speechSynthesis' in window), speechUnlocked=false, speakInFlight=false;
+let voice=null, audioOff=false, ttsAudio=null;
 function pickVoice(){
   if(!('speechSynthesis' in window)) return;
   const vs = speechSynthesis.getVoices();
@@ -594,93 +595,72 @@ function applyAudioMode(){
   if(audioOff) showATarget();
 }
 function checkAudio(){
+  // Audio TTS path always works online; never show "sound is off" for Edge/mobile.
+  if(USE_AUDIO_TTS){ audioOff=false; applyAudioMode(); return; }
   if(!('speechSynthesis' in window)){ audioOff=true; }
-  else {
-    pickVoice();
-    // Mobile Safari / Edge often return [] voices until after the first speak —
-    // never treat "not loaded yet" as permanently muted.
-    audioOff = false;
-  }
+  else { pickVoice(); audioOff=false; }
   applyAudioMode();
 }
 function unlockAudioGraph(){
   try{ AC(); }catch(e){}
-  try{ if('speechSynthesis' in window && speechSynthesis.paused) speechSynthesis.resume(); }catch(e){}
 }
-function unlockSpeech(){
-  if(!('speechSynthesis' in window)){ unlockAudioGraph(); return; }
-  unlockAudioGraph();
-  if(speechUnlocked) return;
-  speechUnlocked = true;
-  pickVoice();
-  // Defer warm-up past the current event turn (setTimeout 0, not microtask).
-  // pointerdown microtasks flush BEFORE click — that raced cancel and muted Edge/mobile.
-  // If Hear-it speak() already ran in this tap, skip warm entirely.
-  setTimeout(()=>{
-    if(speakInFlight || speechSynthesis.speaking || speechSynthesis.pending) return;
-    try{
-      const warm = new SpeechSynthesisUtterance('hi');
-      warm.volume = 0.01; // volume 0 is ignored by some engines and never unlocks
-      warm.rate = 2;
-      warm.pitch = 1;
-      warm.lang = 'en-GB';
-      speechSynthesis.speak(warm);
-      if(speechSynthesis.paused) speechSynthesis.resume();
-    }catch(e){}
-  }, 0);
-}
-if('speechSynthesis' in window){
+['pointerdown','touchstart','click'].forEach(ev=>{
+  document.addEventListener(ev, unlockAudioGraph, {capture:true, once:true});
+});
+if('speechSynthesis' in window && !USE_AUDIO_TTS){
   pickVoice();
   speechSynthesis.onvoiceschanged = checkAudio;
   setTimeout(checkAudio, 1500);
-  // Unlock on the first real tap/click anywhere (covers Hear it + Start / Next).
-  ['pointerdown','touchstart','click'].forEach(ev=>{
-    document.addEventListener(ev, unlockSpeech, {capture:true, once:true});
-  });
 }
-// Some words are read as their LETTER NAME when spoken alone (e.g. "a" -> "ay",
-// "I" -> the pronoun is fine but article "a" is not). Remap those to a spelling
-// that forces the natural spoken sound. Display/spelling on screen stay unchanged.
+checkAudio();
+// Some words are read as their LETTER NAME when spoken alone (e.g. "a" -> "ay").
+// Remap those to a spelling that forces the natural spoken sound.
 const SPEAK_AS = { 'a':'uh' };
-function speak(text){
-  if(!('speechSynthesis' in window)) return;
-  speakInFlight = true;
-  // Real Hear-it / Listen taps already count as the unlock gesture — speak sync below.
-  unlockSpeech();
-  if(!voice) pickVoice();
+function spokenText(text){
   const key = (text||'').trim().toLowerCase();
-  if(SPEAK_AS[key]) text = SPEAK_AS[key];
+  if(SPEAK_AS[key]) return SPEAK_AS[key];
+  return String(text||'');
+}
+function speakViaAudio(text){
+  const t = spokenText(text).trim();
+  if(!t) return;
+  unlockAudioGraph();
+  try{ if(ttsAudio){ ttsAudio.onerror=null; ttsAudio.onended=null; ttsAudio.pause(); } }catch(e){}
+  // Google Translate TTS returns audio/mpeg and plays via <audio> (no CORS needed for playback).
+  // Works on Edge + mobile + in-app browsers where speechSynthesis is silent/broken.
+  const url = 'https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=en&q='
+    + encodeURIComponent(t.slice(0, 180));
+  ttsAudio = new Audio(url);
+  ttsAudio.preload = 'auto';
+  const p = ttsAudio.play();
+  if(p && p.catch) p.catch(()=>{ /* autoplay blocked — user must tap again */ });
+}
+function speakViaSynth(text){
+  if(!('speechSynthesis' in window)){ speakViaAudio(text); return; }
+  const t = spokenText(text);
+  if(!voice) pickVoice();
   const busy = !!(speechSynthesis.speaking || speechSynthesis.pending);
-  // Cancel only if a previous real utterance is still going — never after a
-  // same-gesture warm-up (warm is deferred via microtask above).
   try{ if(busy) speechSynthesis.cancel(); }catch(e){}
-  const u = new SpeechSynthesisUtterance(String(text||''));
-  // Assign a voice only when the engine has one; forcing a stale Voice can mute Edge.
+  const u = new SpeechSynthesisUtterance(t);
   if(voice && voice.lang){ try{ u.voice = voice; }catch(e){} }
-  // Short single words (like "the", "is", "on") drawl and sound odd at a slow
-  // rate, so say them closer to natural speed; keep longer text slower and clearer.
-  const shortWord = /^[a-z]{1,4}$/i.test(String(text).trim());
+  const shortWord = /^[a-z]{1,4}$/i.test(t.trim());
   u.lang = (voice && voice.lang) ? voice.lang : 'en-GB';
   u.rate = shortWord ? 1.0 : DEFAULT_RATE;
   u.pitch = DEFAULT_PITCH;
   u.volume = 1;
-  const done = ()=>{ speakInFlight = false; };
-  u.onend = done;
-  u.onerror = done;
+  u.onerror = ()=> speakViaAudio(t);
   const go = ()=>{
     try{
       speechSynthesis.speak(u);
-      // WebKit often leaves the engine paused after cancel(); resume kicks it.
-      // Safe on Edge/Chrome; avoid pause()/resume keepalive loops (Android cancels on pause).
       try{ speechSynthesis.resume(); }catch(e){}
-    }catch(e){ done(); }
+    }catch(e){ speakViaAudio(t); }
   };
-  // Chrome desktop often needs a short gap after cancel(); Edge/mobile must stay
-  // in the same user-gesture turn (no setTimeout — that kills audio).
   if(busy && CHROME_DESKTOP_GAP) setTimeout(go, 60);
   else go();
-  // Safety: clear in-flight if engine never fires onend/onerror
-  setTimeout(done, 8000);
+}
+function speak(text){
+  if(USE_AUDIO_TTS) speakViaAudio(text);
+  else speakViaSynth(text);
 }
 
 const cv=$('#confetti'); const ctx=cv.getContext('2d');
