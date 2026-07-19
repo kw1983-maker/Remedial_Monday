@@ -571,7 +571,15 @@ function addStar(n=1){ score+=n; $('#score').textContent=score; }
 function resetScore(){ score=0; $('#score').textContent=0; }
 
 const DEFAULT_RATE=0.85, DEFAULT_PITCH=1.15;
-let voice=null, audioOff = !('speechSynthesis' in window);
+const UA = navigator.userAgent||'';
+const IS_IOS = /iPhone|iPad|iPod/i.test(UA) || (navigator.platform==='MacIntel' && navigator.maxTouchPoints>1);
+const IS_ANDROID = /Android/i.test(UA);
+const IS_MOBILE = IS_IOS || IS_ANDROID;
+const IS_EDGE = /Edg\//i.test(UA);
+// Chrome desktop is the one browser that often needs a short gap after cancel().
+// Edge + mobile must speak inside the user-gesture chain or Hear it stays silent.
+const CHROME_DESKTOP_GAP = /Chrome\//i.test(UA) && !IS_EDGE && !IS_MOBILE;
+let voice=null, audioOff = !('speechSynthesis' in window), speechUnlocked=false;
 function pickVoice(){
   if(!('speechSynthesis' in window)) return;
   const vs = speechSynthesis.getVoices();
@@ -586,13 +594,37 @@ function applyAudioMode(){
 }
 function checkAudio(){
   if(!('speechSynthesis' in window)){ audioOff=true; }
-  else { pickVoice(); audioOff = speechSynthesis.getVoices().length===0; }
+  else {
+    pickVoice();
+    // Mobile Safari / Edge often return [] voices until after the first speak —
+    // never treat "not loaded yet" as permanently muted.
+    audioOff = false;
+  }
   applyAudioMode();
+}
+function unlockSpeech(){
+  if(!('speechSynthesis' in window) || speechUnlocked) return;
+  speechUnlocked = true;
+  try{
+    // iOS / Edge / in-app browsers need a speak() inside a real user gesture first.
+    // Do NOT cancel() here — cancel races the next Hear-it speak and silences Edge/mobile.
+    const warm = new SpeechSynthesisUtterance(' ');
+    warm.volume = 0;
+    warm.rate = 2;
+    speechSynthesis.speak(warm);
+    if(speechSynthesis.paused) speechSynthesis.resume();
+  }catch(e){}
+  try{ AC(); }catch(e){}
+  pickVoice();
 }
 if('speechSynthesis' in window){
   pickVoice();
   speechSynthesis.onvoiceschanged = checkAudio;
   setTimeout(checkAudio, 1500);
+  // Unlock on the first real tap/click anywhere (covers Hear it + Start / Next).
+  ['pointerdown','touchstart','click'].forEach(ev=>{
+    document.addEventListener(ev, unlockSpeech, {capture:true, once:true});
+  });
 }
 // Some words are read as their LETTER NAME when spoken alone (e.g. "a" -> "ay",
 // "I" -> the pronoun is fine but article "a" is not). Remap those to a spelling
@@ -600,17 +632,32 @@ if('speechSynthesis' in window){
 const SPEAK_AS = { 'a':'uh' };
 function speak(text){
   if(!('speechSynthesis' in window)) return;
+  // Real Hear-it / Listen taps already count as the unlock gesture — speak sync below.
+  unlockSpeech();
   if(!voice) pickVoice();
   const key = (text||'').trim().toLowerCase();
   if(SPEAK_AS[key]) text = SPEAK_AS[key];
-  try{ if(speechSynthesis.speaking||speechSynthesis.pending) speechSynthesis.cancel(); }catch(e){}
-  const u = new SpeechSynthesisUtterance(text);
+  const busy = !!(speechSynthesis.speaking || speechSynthesis.pending);
+  try{ if(busy) speechSynthesis.cancel(); }catch(e){}
+  const u = new SpeechSynthesisUtterance(String(text||''));
   if(voice) u.voice=voice;
   // Short single words (like "the", "is", "on") drawl and sound odd at a slow
   // rate, so say them closer to natural speed; keep longer text slower and clearer.
-  const shortWord = /^[a-z]{1,4}$/i.test(text.trim());
-  u.lang = voice ? voice.lang : 'en-GB'; u.rate = shortWord ? 1.0 : DEFAULT_RATE; u.pitch=DEFAULT_PITCH;
-  setTimeout(()=>{ try{ speechSynthesis.speak(u); }catch(e){} }, 60);
+  const shortWord = /^[a-z]{1,4}$/i.test(String(text).trim());
+  u.lang = voice ? voice.lang : 'en-GB';
+  u.rate = shortWord ? 1.0 : DEFAULT_RATE;
+  u.pitch = DEFAULT_PITCH;
+  u.volume = 1;
+  const go = ()=>{
+    try{
+      speechSynthesis.speak(u);
+      // WebKit often leaves the engine paused after cancel(); resume kicks it.
+      // Safe on Edge/Chrome; avoid pause()/resume keepalive loops (Android cancels on pause).
+      try{ speechSynthesis.resume(); }catch(e){}
+    }catch(e){}
+  };
+  if(busy && CHROME_DESKTOP_GAP) setTimeout(go, 60);
+  else go();
 }
 
 const cv=$('#confetti'); const ctx=cv.getContext('2d');

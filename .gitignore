@@ -3,3 +3,5 @@ _slides/
 .vercel/
 .DS_Store
 Thumbs.db
+
+.vercel
