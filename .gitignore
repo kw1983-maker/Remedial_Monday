@@ -1,0 +1,5 @@
+*.pdf
+_slides/
+.vercel/
+.DS_Store
+Thumbs.db

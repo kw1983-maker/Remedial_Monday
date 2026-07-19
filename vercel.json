@@ -1,0 +1,5 @@
+{
+  "rewrites": [
+    { "source": "/", "destination": "/level1-sight-words-remedial.html" }
+  ]
+}
