@@ -323,8 +323,13 @@ footer{text-align:center; color:#4b3f7a; font-weight:bold; margin-top:20px}
 <div class="wrap">
 
   <section id="attend">
-    <h2>📋 Attendance <span class="tag" id="attendCount">Present: 0 / 0</span></h2>
+    <h2>📋 Attendance<span id="attendClassName"></span> <span class="tag" id="attendCount">Present: 0 / 0</span></h2>
     <p class="lead">Everyone starts <b>present</b>. Tap a name to mark it <b>absent</b>; tap again for present. Your marks are saved on this device.</p>
+    <div class="setbar" role="group" aria-label="Choose class" style="margin-bottom:8px">
+      <span class="setbar-label">Class:</span>
+      <button class="setBtn classBtn active" data-cls="STEM 1" aria-pressed="true">STEM 1</button>
+      <button class="setBtn classBtn" data-cls="1L" aria-pressed="false">1L</button>
+    </div>
     <div class="row" style="justify-content:flex-start; margin-bottom:6px">
       <button class="btn alt" id="attAllPresent">✅ All present</button>
       <button class="btn sun" id="attExcel">⬇️ Download Excel</button>
@@ -491,16 +496,12 @@ footer{text-align:center; color:#4b3f7a; font-weight:bold; margin-top:20px}
     <strong>🎯 Pick a Pupil</strong>
     <button id="pickClose" aria-label="Close picker">✕</button>
   </div>
-  <div class="setbar" id="pickGroupBar" role="group" aria-label="Choose group">
-    <span class="setbar-label">Group:</span>
-    <button class="setBtn active" data-grp="all" aria-pressed="true">All</button>
-    <button class="setBtn" data-grp="1" aria-pressed="false">1</button>
-    <button class="setBtn" data-grp="2" aria-pressed="false">2</button>
-    <button class="setBtn" data-grp="3" aria-pressed="false">3</button>
-    <button class="setBtn" data-grp="4" aria-pressed="false">4</button>
-    <button class="setBtn" data-grp="5" aria-pressed="false">5</button>
-    <button class="setBtn" data-grp="6" aria-pressed="false">6</button>
+  <div class="setbar" role="group" aria-label="Choose class">
+    <span class="setbar-label">Class:</span>
+    <button class="setBtn classBtn active" data-cls="STEM 1" aria-pressed="true">STEM 1</button>
+    <button class="setBtn classBtn" data-cls="1L" aria-pressed="false">1L</button>
   </div>
+  <div class="setbar" id="pickGroupBar" role="group" aria-label="Choose group"></div>
   <div class="pickStage">
     <div class="pickName" id="pickName">Tap to pick! 🎲</div>
     <div class="pickGroup" id="pickGroup" role="status" aria-live="polite"></div>
@@ -1063,37 +1064,61 @@ $('#dHint').onclick=revealCurrentLetter;
 $('#dSkip').onclick=skipSpellWord;
 $('#dReset').onclick=buildD;
 
-/* ---- Pick-a-Pupil (names from "STEM 1 Groups") ---- */
-const PUPILS = [
-  {n:"LIM ZHEN YU",g:1,c:"1C",s:"L"},{n:"JORDAN GOO JUN YANG",g:1,c:"1E",s:"L"},
-  {n:"DONNY RAYYAN BIN MUHD FAISAL",g:1,c:"1F",s:"L"},{n:"HANAN DELISHA BINTI ABDUL MUIZZ",g:1,c:"1G",s:"P"},
-  {n:"KONG EE YAN",g:1,c:"1G",s:"P"},{n:"KELINE MAH YING JIE",g:1,c:"1I",s:"P"},
-  {n:"CELESTE LIM PEI YING",g:2,c:"1D",s:"P"},{n:"CHEE YEE HAN",g:2,c:"1D",s:"P"},
-  {n:"NG CHU QING",g:2,c:"1D",s:"P"},{n:"SEOW YANG XIANG",g:2,c:"1D",s:"L"},
-  {n:"CHAN CHUN YUE",g:2,c:"2G",s:"L"},{n:"KOH ZHI HAO",g:2,c:"2G",s:"L"},
-  {n:"JAYDEN TANG ZHI LOK",g:3,c:"1J",s:"L"},{n:"TAN ZHI XUAN",g:3,c:"1J",s:"L"},
-  {n:"JASPER NG JIA JUN",g:3,c:"2A",s:"L"},{n:"DYLAN CHONG JUN HONG",g:3,c:"2C",s:"L"},
-  {n:"LOO JUN RUI",g:3,c:"2C",s:"L"},{n:"ONG ZI HAO",g:3,c:"2D",s:"L"},
-  {n:"MAGGIE CHEONG",g:4,c:"1K",s:"P"},{n:"TAN ZHI WEI",g:4,c:"2E",s:"P"},
-  {n:"WONG XIU ZHEN",g:4,c:"2E",s:"P"},{n:"CHONG YU TONG",g:4,c:"2H",s:"P"},
-  {n:"GENNAH TAN QIAN YU",g:4,c:"2H",s:"P"},{n:"PHANG WENG HANG",g:4,c:"2H",s:"L"},
-  {n:"CHEONG JIN ROU",g:5,c:"2B",s:"P"},{n:"FONG RUO LING",g:5,c:"2B",s:"P"},
-  {n:"TOH LE ZUN",g:5,c:"2B",s:"L"},{n:"CHUAH JUN JIE",g:5,c:"2F",s:"L"},
-  {n:"EE RU YING",g:5,c:"2F",s:"P"},{n:"JACKSON KONG WEI XIANG",g:5,c:"2F",s:"L"},
-  {n:"ASHLEY LAM XUE YING",g:6,c:"2I",s:"P"},{n:"REBECCA CHONG JIA XIN",g:6,c:"2I",s:"P"},
-  {n:"TAN ANN YU",g:6,c:"2I",s:"P"},{n:"HEW FENG YA",g:6,c:"2J",s:"P"},
-  {n:"SAM XUAN XUAN",g:6,c:"2J",s:"P"},{n:"TAN XI HUI",g:6,c:"2J",s:"P"},
-];
-/* ---- Attendance (saved on this device) ---- */
-const ATT_KEY = 'l1sw_attendance';
+/* ---- Classes: each teacher's roster for Attendance + Pick-a-Pupil ---- */
+const CLASSES = {
+  'STEM 1': { label:'STEM 1', hasGroups:true, pupils:[
+    {n:"LIM ZHEN YU",g:1,c:"1C",s:"L"},{n:"JORDAN GOO JUN YANG",g:1,c:"1E",s:"L"},
+    {n:"DONNY RAYYAN BIN MUHD FAISAL",g:1,c:"1F",s:"L"},{n:"HANAN DELISHA BINTI ABDUL MUIZZ",g:1,c:"1G",s:"P"},
+    {n:"KONG EE YAN",g:1,c:"1G",s:"P"},{n:"KELINE MAH YING JIE",g:1,c:"1I",s:"P"},
+    {n:"CELESTE LIM PEI YING",g:2,c:"1D",s:"P"},{n:"CHEE YEE HAN",g:2,c:"1D",s:"P"},
+    {n:"NG CHU QING",g:2,c:"1D",s:"P"},{n:"SEOW YANG XIANG",g:2,c:"1D",s:"L"},
+    {n:"CHAN CHUN YUE",g:2,c:"2G",s:"L"},{n:"KOH ZHI HAO",g:2,c:"2G",s:"L"},
+    {n:"JAYDEN TANG ZHI LOK",g:3,c:"1J",s:"L"},{n:"TAN ZHI XUAN",g:3,c:"1J",s:"L"},
+    {n:"JASPER NG JIA JUN",g:3,c:"2A",s:"L"},{n:"DYLAN CHONG JUN HONG",g:3,c:"2C",s:"L"},
+    {n:"LOO JUN RUI",g:3,c:"2C",s:"L"},{n:"ONG ZI HAO",g:3,c:"2D",s:"L"},
+    {n:"MAGGIE CHEONG",g:4,c:"1K",s:"P"},{n:"TAN ZHI WEI",g:4,c:"2E",s:"P"},
+    {n:"WONG XIU ZHEN",g:4,c:"2E",s:"P"},{n:"CHONG YU TONG",g:4,c:"2H",s:"P"},
+    {n:"GENNAH TAN QIAN YU",g:4,c:"2H",s:"P"},{n:"PHANG WENG HANG",g:4,c:"2H",s:"L"},
+    {n:"CHEONG JIN ROU",g:5,c:"2B",s:"P"},{n:"FONG RUO LING",g:5,c:"2B",s:"P"},
+    {n:"TOH LE ZUN",g:5,c:"2B",s:"L"},{n:"CHUAH JUN JIE",g:5,c:"2F",s:"L"},
+    {n:"EE RU YING",g:5,c:"2F",s:"P"},{n:"JACKSON KONG WEI XIANG",g:5,c:"2F",s:"L"},
+    {n:"ASHLEY LAM XUE YING",g:6,c:"2I",s:"P"},{n:"REBECCA CHONG JIA XIN",g:6,c:"2I",s:"P"},
+    {n:"TAN ANN YU",g:6,c:"2I",s:"P"},{n:"HEW FENG YA",g:6,c:"2J",s:"P"},
+    {n:"SAM XUAN XUAN",g:6,c:"2J",s:"P"},{n:"TAN XI HUI",g:6,c:"2J",s:"P"},
+  ]},
+  '1L': { label:'1L', hasGroups:false, pupils:[
+    {n:"MARCUS ANG RUI YANG",g:null,c:"1L",s:"L"},{n:"DORIS CHIA SHU HUI",g:null,c:"1G",s:"P"},
+    {n:"SEAH YUN XI",g:null,c:"1G",s:"P"},{n:"BRYAN WOO",g:null,c:"1L",s:"L"},
+    {n:"CHEAH WEI HAO",g:null,c:"1L",s:"L"},{n:"CHLOE LIM RUI YI",g:null,c:"1L",s:"P"},
+    {n:"DANIEL CHONG JUN BAO",g:null,c:"1L",s:"L"},{n:"JOSEPH CHEW HUAT WEE",g:null,c:"1L",s:"L"},
+    {n:"NUR HAFIZHA DHALISYA BINTI ABDULLAH",g:null,c:"1L",s:"P"},{n:"OLIVIA CHEW SHI YAO",g:null,c:"1L",s:"P"},
+    {n:"SOH LEY XIN",g:null,c:"1L",s:"P"},{n:"REVINESH SAI",g:null,c:"1A",s:"L"},
+    {n:"HO SIT YAO",g:null,c:"1F",s:"P"},{n:"CHONG YAO XIANG",g:null,c:"1L",s:"L"},
+    {n:"RICHARD KHO JUN WEI",g:null,c:"1L",s:"L"},{n:"WIDNES LIM CHU JIA",g:null,c:"1L",s:"L"},
+    {n:"RISKY DE PANG WILLSEN",g:null,c:"2G",s:"L"},{n:"QUINTON LOKE JAYHO",g:null,c:"2I",s:"L"},
+    {n:"TEO MING YAO",g:null,c:"2I",s:"L"},{n:"AW YEE ZHEN",g:null,c:"2F",s:"P"},
+    {n:"LISHA AMELIA FITRI BINTI SUTONO",g:null,c:"2G",s:"P"},{n:"BRYAN AW",g:null,c:"2H",s:"L"},
+    {n:"CHAI KO YEE",g:null,c:"2H",s:"P"},{n:"GRANT LIM JUN TING",g:null,c:"2H",s:"L"},
+    {n:"JOSTHAN YEE SHENG YU",g:null,c:"2H",s:"L"},{n:"SHARON LIM JIA YI",g:null,c:"2J",s:"P"},
+    {n:"CHONG JUN XI",g:null,c:"1L",s:"L"},{n:"FRANKLIN CHONG MING JIE",g:null,c:"1L",s:"L"},
+    {n:"LEE XUN YI",g:null,c:"1L",s:"P"},{n:"LEE YIE TING",g:null,c:"1L",s:"P"},
+    {n:"WONG JIA JUN",g:null,c:"1L",s:"L"},
+  ]},
+};
+let activeClass = 'STEM 1';
+try{ const c=localStorage.getItem('l1sw_class'); if(c && CLASSES[c]) activeClass=c; }catch(e){}
+let PUPILS = CLASSES[activeClass].pupils;
+/* ---- Attendance (saved on this device, per class) ---- */
+function attKey(){ return 'l1sw_attendance_'+activeClass; }
 let present = PUPILS.map(()=>true);
 function todayStr(){
   const d=new Date();
   return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
 }
 function loadAttendance(){
+  present = PUPILS.map(()=>true);
   try{
-    const raw = localStorage.getItem(ATT_KEY);
+    const raw = localStorage.getItem(attKey());
     if(raw){
       const o = JSON.parse(raw);
       if(o && o.date===todayStr() && Array.isArray(o.present) && o.present.length===PUPILS.length){
@@ -1103,20 +1128,24 @@ function loadAttendance(){
   }catch(e){}
 }
 function saveAttendance(){
-  try{ localStorage.setItem(ATT_KEY, JSON.stringify({date:todayStr(), present})); }catch(e){}
+  try{ localStorage.setItem(attKey(), JSON.stringify({date:todayStr(), present})); }catch(e){}
 }
 function updateAttendCount(){
   const n = present.filter(Boolean).length;
   $('#attendCount').textContent = `Present: ${n} / ${PUPILS.length}`;
 }
 function buildAttendance(){
-  const groups = [...new Set(PUPILS.map(p=>p.g))].sort((a,b)=>a-b);
-  $('#attendGroups').innerHTML = groups.map(g=>{
-    const chips = PUPILS.map((p,i)=> p.g===g
-      ? `<button class="pupilChip ${present[i]?'present':'absent'}" data-i="${i}" aria-pressed="${present[i]}">${p.n}</button>` : '')
-      .join('');
-    return `<div class="attGroup"><h3>Group ${g}</h3><div class="chips">${chips}</div></div>`;
-  }).join('');
+  const chipFor = (p,i)=>`<button class="pupilChip ${present[i]?'present':'absent'}" data-i="${i}" aria-pressed="${present[i]}">${p.n}</button>`;
+  if(CLASSES[activeClass].hasGroups){
+    const groups = [...new Set(PUPILS.map(p=>p.g))].sort((a,b)=>a-b);
+    $('#attendGroups').innerHTML = groups.map(g=>{
+      const chips = PUPILS.map((p,i)=> p.g===g ? chipFor(p,i) : '').join('');
+      return `<div class="attGroup"><h3>Group ${g}</h3><div class="chips">${chips}</div></div>`;
+    }).join('');
+  } else {
+    // Flat list (e.g. 1L) — no group headers.
+    $('#attendGroups').innerHTML = `<div class="attGroup"><div class="chips">${PUPILS.map(chipFor).join('')}</div></div>`;
+  }
   $('#attendGroups').querySelectorAll('.pupilChip').forEach(el=>{
     el.onclick = ()=>{
       const i = +el.dataset.i;
@@ -1187,7 +1216,7 @@ function exportAttendanceXlsx(){
   const COLS=['A','B','C','D','E','F'];
   const rowXml=(r,cells)=>`<row r="${r}">${cells.map((c,i)=>c==null?'':(typeof c==='number'?cn(COLS[i]+r,c):cs(COLS[i]+r,c))).join('')}</row>`;
   let r=1, rows='';
-  rows+=rowXml(r++, ['KEHADIRAN STEM 1  —  '+todayStr()]);
+  rows+=rowXml(r++, ['KEHADIRAN '+activeClass+'  —  '+todayStr()]);
   rows+=rowXml(r++, ['BIL','KUMPULAN','KELAS','NAMA','JANTINA','KEHADIRAN']);
   PUPILS.forEach((p,i)=>{ rows+=rowXml(r++, [i+1, p.g, p.c, p.n, p.s, present[i]?'Hadir':'Tidak Hadir']); });
   const nP=present.filter(Boolean).length;
@@ -1220,14 +1249,12 @@ function exportAttendanceXlsx(){
   ];
   const blob=new Blob([_zip(files)],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
   const url=URL.createObjectURL(blob), a=document.createElement('a');
-  a.href=url; a.download='Kehadiran STEM 1 '+todayStr()+'.xlsx'; document.body.appendChild(a); a.click(); a.remove();
+  a.href=url; a.download='Kehadiran '+activeClass+' '+todayStr()+'.xlsx'; document.body.appendChild(a); a.click(); a.remove();
   setTimeout(()=>URL.revokeObjectURL(url),1500);
   $('#attSaved').textContent='Excel downloaded ✓'; sfx.star();
   setTimeout(()=>{ $('#attSaved').textContent=''; }, 2500);
 }
 $('#attExcel').onclick = exportAttendanceXlsx;
-
-loadAttendance(); buildAttendance();
 
 let pickFilter='all', pickNoRepeat=true, pickPool=[], picking=false;
 function pupilsFor(){ return pickFilter==='all' ? PUPILS : PUPILS.filter(p=>p.g===+pickFilter); }
@@ -1258,7 +1285,9 @@ function pickPupil(){
     else {
       nameEl.classList.remove('spinning');
       nameEl.textContent = chosen.n;
-      grpEl.textContent = '⭐ Group ' + chosen.g + ' — your turn!';
+      grpEl.textContent = (CLASSES[activeClass].hasGroups && chosen.g!=null)
+        ? '⭐ Group ' + chosen.g + ' — your turn!'
+        : '⭐ Your turn!';
       picking = false;
       confetti(120); sfx.win();
       updatePickProg();
@@ -1279,17 +1308,52 @@ $('#pickRepeatToggle').onclick = (e) => {
   b.setAttribute('aria-pressed', pickNoRepeat ? 'true':'false');
   refillPool(); updatePickProg(); sfx.pop();
 };
-document.querySelectorAll('#pickGroupBar .setBtn').forEach(b=>{
-  b.onclick = () => {
-    pickFilter = b.dataset.grp;
-    document.querySelectorAll('#pickGroupBar .setBtn').forEach(x=>{
-      const on = x===b; x.classList.toggle('active', on); x.setAttribute('aria-pressed', on?'true':'false');
-    });
-    refillPool(); updatePickProg();
-    $('#pickName').textContent = 'Tap to pick! 🎲'; $('#pickGroup').textContent = '';
-  };
+// Build the group filter bar from the active class. Flat classes (e.g. 1L) get no
+// group buttons — the whole bar is hidden and the filter stays "all".
+function buildPickGroupBar(){
+  const bar = $('#pickGroupBar');
+  const cls = CLASSES[activeClass];
+  pickFilter = 'all';
+  if(!cls.hasGroups){ bar.style.display = 'none'; bar.innerHTML=''; return; }
+  bar.style.display = '';
+  const groups = [...new Set(cls.pupils.map(p=>p.g))].sort((a,b)=>a-b);
+  bar.innerHTML = `<span class="setbar-label">Group:</span>`
+    + `<button class="setBtn active" data-grp="all" aria-pressed="true">All</button>`
+    + groups.map(g=>`<button class="setBtn" data-grp="${g}" aria-pressed="false">${g}</button>`).join('');
+  bar.querySelectorAll('.setBtn').forEach(b=>{
+    b.onclick = () => {
+      pickFilter = b.dataset.grp;
+      bar.querySelectorAll('.setBtn').forEach(x=>{
+        const on = x===b; x.classList.toggle('active', on); x.setAttribute('aria-pressed', on?'true':'false');
+      });
+      refillPool(); updatePickProg();
+      $('#pickName').textContent = 'Tap to pick! 🎲'; $('#pickGroup').textContent = '';
+    };
+  });
+}
+
+// ---- Class switcher (STEM 1 / 1L) — drives Attendance + Pick-a-Pupil ----
+function updateClassBars(){
+  document.querySelectorAll('.classBtn').forEach(b=>{
+    const on = b.dataset.cls===activeClass;
+    b.classList.toggle('active', on); b.setAttribute('aria-pressed', on?'true':'false');
+  });
+  const h = $('#attendClassName'); if(h) h.textContent = ' — '+CLASSES[activeClass].label;
+}
+function setActiveClass(key){
+  if(!CLASSES[key]) return;
+  activeClass = key;
+  try{ localStorage.setItem('l1sw_class', key); }catch(e){}
+  PUPILS = CLASSES[key].pupils;
+  loadAttendance(); buildAttendance();
+  buildPickGroupBar(); refillPool(); updatePickProg();
+  $('#pickName').textContent = 'Tap to pick! 🎲'; $('#pickGroup').textContent = '';
+  updateClassBars();
+}
+document.querySelectorAll('.classBtn').forEach(b=>{
+  b.onclick = ()=>{ setActiveClass(b.dataset.cls); sfx.pop(); };
 });
-refillPool(); updatePickProg();
+setActiveClass(activeClass);   // initial build for the saved/default class
 
 // Floating panel open/close
 function setPicker(open){
