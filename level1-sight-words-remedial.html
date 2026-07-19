@@ -578,8 +578,9 @@ const IS_MOBILE = IS_IOS || IS_ANDROID;
 const IS_EDGE = /Edg\//i.test(UA);
 // Chrome desktop is the one browser that often needs a short gap after cancel().
 // Edge + mobile must speak inside the user-gesture chain or Hear it stays silent.
+// <!-- tts-fix-v2 20260719 -->
 const CHROME_DESKTOP_GAP = /Chrome\//i.test(UA) && !IS_EDGE && !IS_MOBILE;
-let voice=null, audioOff = !('speechSynthesis' in window), speechUnlocked=false;
+let voice=null, audioOff = !('speechSynthesis' in window), speechUnlocked=false, speakInFlight=false;
 function pickVoice(){
   if(!('speechSynthesis' in window)) return;
   const vs = speechSynthesis.getVoices();
@@ -602,20 +603,31 @@ function checkAudio(){
   }
   applyAudioMode();
 }
-function unlockSpeech(){
-  if(!('speechSynthesis' in window) || speechUnlocked) return;
-  speechUnlocked = true;
-  try{
-    // iOS / Edge / in-app browsers need a speak() inside a real user gesture first.
-    // Do NOT cancel() here — cancel races the next Hear-it speak and silences Edge/mobile.
-    const warm = new SpeechSynthesisUtterance(' ');
-    warm.volume = 0;
-    warm.rate = 2;
-    speechSynthesis.speak(warm);
-    if(speechSynthesis.paused) speechSynthesis.resume();
-  }catch(e){}
+function unlockAudioGraph(){
   try{ AC(); }catch(e){}
+  try{ if('speechSynthesis' in window && speechSynthesis.paused) speechSynthesis.resume(); }catch(e){}
+}
+function unlockSpeech(){
+  if(!('speechSynthesis' in window)){ unlockAudioGraph(); return; }
+  unlockAudioGraph();
+  if(speechUnlocked) return;
+  speechUnlocked = true;
   pickVoice();
+  // Defer warm-up past the current event turn (setTimeout 0, not microtask).
+  // pointerdown microtasks flush BEFORE click — that raced cancel and muted Edge/mobile.
+  // If Hear-it speak() already ran in this tap, skip warm entirely.
+  setTimeout(()=>{
+    if(speakInFlight || speechSynthesis.speaking || speechSynthesis.pending) return;
+    try{
+      const warm = new SpeechSynthesisUtterance('hi');
+      warm.volume = 0.01; // volume 0 is ignored by some engines and never unlocks
+      warm.rate = 2;
+      warm.pitch = 1;
+      warm.lang = 'en-GB';
+      speechSynthesis.speak(warm);
+      if(speechSynthesis.paused) speechSynthesis.resume();
+    }catch(e){}
+  }, 0);
 }
 if('speechSynthesis' in window){
   pickVoice();
@@ -632,32 +644,43 @@ if('speechSynthesis' in window){
 const SPEAK_AS = { 'a':'uh' };
 function speak(text){
   if(!('speechSynthesis' in window)) return;
+  speakInFlight = true;
   // Real Hear-it / Listen taps already count as the unlock gesture — speak sync below.
   unlockSpeech();
   if(!voice) pickVoice();
   const key = (text||'').trim().toLowerCase();
   if(SPEAK_AS[key]) text = SPEAK_AS[key];
   const busy = !!(speechSynthesis.speaking || speechSynthesis.pending);
+  // Cancel only if a previous real utterance is still going — never after a
+  // same-gesture warm-up (warm is deferred via microtask above).
   try{ if(busy) speechSynthesis.cancel(); }catch(e){}
   const u = new SpeechSynthesisUtterance(String(text||''));
-  if(voice) u.voice=voice;
+  // Assign a voice only when the engine has one; forcing a stale Voice can mute Edge.
+  if(voice && voice.lang){ try{ u.voice = voice; }catch(e){} }
   // Short single words (like "the", "is", "on") drawl and sound odd at a slow
   // rate, so say them closer to natural speed; keep longer text slower and clearer.
   const shortWord = /^[a-z]{1,4}$/i.test(String(text).trim());
-  u.lang = voice ? voice.lang : 'en-GB';
+  u.lang = (voice && voice.lang) ? voice.lang : 'en-GB';
   u.rate = shortWord ? 1.0 : DEFAULT_RATE;
   u.pitch = DEFAULT_PITCH;
   u.volume = 1;
+  const done = ()=>{ speakInFlight = false; };
+  u.onend = done;
+  u.onerror = done;
   const go = ()=>{
     try{
       speechSynthesis.speak(u);
       // WebKit often leaves the engine paused after cancel(); resume kicks it.
       // Safe on Edge/Chrome; avoid pause()/resume keepalive loops (Android cancels on pause).
       try{ speechSynthesis.resume(); }catch(e){}
-    }catch(e){}
+    }catch(e){ done(); }
   };
+  // Chrome desktop often needs a short gap after cancel(); Edge/mobile must stay
+  // in the same user-gesture turn (no setTimeout — that kills audio).
   if(busy && CHROME_DESKTOP_GAP) setTimeout(go, 60);
   else go();
+  // Safety: clear in-flight if engine never fires onend/onerror
+  setTimeout(done, 8000);
 }
 
 const cv=$('#confetti'); const ctx=cv.getContext('2d');
