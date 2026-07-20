@@ -195,13 +195,50 @@
     let currentSetId = 'people';
     let currentTarget = null;
 
+    const SPEAK_AS = { 'a': 'uh' };
+    function spokenWord(w){
+        const key = String(w || '').trim().toLowerCase();
+        if(SPEAK_AS[key]) return SPEAK_AS[key];
+        return String(w || '');
+    }
+    let ttsAudio = null;
+
     function speakWord(w){
-        if(!('speechSynthesis' in window)) return;
+        // When embedded in the remedial app, use its pre-recorded word clips (clear pronunciation).
         try {
-            speechSynthesis.cancel();
-            const u = new SpeechSynthesisUtterance('Shoot the word ' + w);
-            u.rate = 0.8; u.pitch = 1.1; u.lang = 'en-GB';
-            speechSynthesis.speak(u);
+            if(window.parent && window.parent !== window && typeof window.parent.speak === 'function'){
+                window.parent.speak(w);
+                return;
+            }
+        } catch(e) { /* ignore */ }
+
+        const text = spokenWord(w);
+        if(!text) return;
+        AudioEngine.init();
+
+        if('speechSynthesis' in window){
+            try {
+                speechSynthesis.cancel();
+                const u = new SpeechSynthesisUtterance(text);
+                const short = /^[a-z]{1,4}$/i.test(text.trim());
+                u.rate = short ? 1.0 : 0.85;
+                u.pitch = 1.15;
+                u.lang = 'en-GB';
+                u.volume = 1;
+                speechSynthesis.speak(u);
+                try { speechSynthesis.resume(); } catch(e) {}
+                return;
+            } catch(e) { /* fall through */ }
+        }
+
+        try {
+            if(ttsAudio){ ttsAudio.onerror = null; ttsAudio.pause(); }
+            ttsAudio = new Audio(
+                'https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=en&q='
+                + encodeURIComponent(text)
+            );
+            const p = ttsAudio.play();
+            if(p && p.catch) p.catch(()=>{});
         } catch(e) { /* ignore */ }
     }
 
