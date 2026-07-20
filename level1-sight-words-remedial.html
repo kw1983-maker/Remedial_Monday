@@ -243,6 +243,14 @@ body.audio-off #aTarget{display:block}
 .slideStage img{width:100%; height:auto; display:block; max-height:74vh; object-fit:contain}
 .slideControls{display:flex; flex-wrap:wrap; gap:10px; align-items:center; justify-content:center; margin-top:14px}
 
+/* Word Shooter embed */
+.gameFrameWrap{
+  border-radius:18px; overflow:hidden; border:4px solid #1a2a3a;
+  background:#050505; width:100%; max-width:640px; margin:0 auto;
+  height:min(78vh, 720px); min-height:420px;
+}
+.gameFrameWrap iframe{display:block; width:100%; height:100%; border:0}
+
 /* Build a Sentence */
 .sentBuild{max-width:720px; margin:0 auto}
 .sentTop{display:flex; align-items:center; justify-content:center; gap:14px; flex-wrap:wrap; margin-bottom:8px}
@@ -317,6 +325,7 @@ footer{text-align:center; color:#4b3f7a; font-weight:bold; margin-top:20px}
     <a href="#actC">🖼️ Pick It</a>
     <a href="#actD">✏️ Spell It</a>
     <a href="#actE">🧩 Build a Sentence</a>
+    <a href="#actF">🎯 Word Shooter</a>
   </div>
 </nav>
 
@@ -484,6 +493,14 @@ footer{text-align:center; color:#4b3f7a; font-weight:bold; margin-top:20px}
       <span class="prog" id="eProg">Sentence 0 of 15</span>
     </div>
     <div class="win" id="eWin" role="status">🏆 Super! You built every sentence! 🏆</div>
+  </section>
+
+  <section id="actF">
+    <h2>🎯 Word Shooter <span class="tag">listen &amp; shoot!</span></h2>
+    <p class="lead">Listen to the word, then <b>click and hold</b> to shoot the correct word bubble. Pick a word set, then aim with your mouse or finger.</p>
+    <div class="gameFrameWrap">
+      <iframe id="wordShooterFrame" src="word-shooter.html" title="Word Shooter game" loading="lazy"></iframe>
+    </div>
   </section>
 
   <footer>Level 1 Core sight words • Read, hear, say and spell • Made for our reading practice 💜</footer>
