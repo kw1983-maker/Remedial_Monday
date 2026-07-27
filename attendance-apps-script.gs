@@ -39,7 +39,7 @@ function doGet(e){
     var sheet = findAttendanceSheet_();
     if(!sheet) return page('Could not find the attendance tab (looking for "YES Programme Attendance").', false);
 
-    var vals = sheet.getDisplayValues();
+    var vals = sheet.getDataRange().getDisplayValues();
 
     // Header row = the row that has "STEM 1" in column A; it holds the date columns.
     var headerRow = -1;

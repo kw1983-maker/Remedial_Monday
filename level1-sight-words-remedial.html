@@ -1277,10 +1277,13 @@ $('#attExcel').onclick = exportAttendanceXlsx;
 
 /* ---- Send attendance straight to the Google Sheet (via a Google Apps Script web app) ---- */
 const sheetUrlKey = 'l1sw_sheet_url';
+// Baked-in default so every browser/device works without pasting. The ⚙️ button still overrides it.
+const DEFAULT_SHEET_URL = 'https://script.google.com/macros/s/AKfycbyMO_fXEAmdRksSfr2ArkvR1OTS1rUQvgJjTvUCebVGC9JxpfJUF7w1jjz9N7yYqku8Cg/exec';
 function getSheetUrl(forcePrompt){
   let url = '';
   try{ url = localStorage.getItem(sheetUrlKey) || ''; }catch(e){}
-  if(forcePrompt || !url){
+  if(!url) url = DEFAULT_SHEET_URL;
+  if(forcePrompt){
     const entered = prompt(
       'Paste your Google Sheet link (the Apps Script web-app URL that ends with /exec).\n\n'+
       'You only set this once — it is saved on this device.', url || 'https://script.google.com/macros/s/…/exec');
