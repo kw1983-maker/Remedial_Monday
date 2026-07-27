@@ -1304,13 +1304,24 @@ $('#attSend').onclick = ()=>{
   const url = getSheetUrl(false);
   if(!url){ $('#attSaved').textContent = 'No Google Sheet link set — tap ⚙️ first.'; return; }
   const presentNames = PUPILS.filter((p,i)=>present[i]).map(p=>p.n);
+  const nP = presentNames.length, nA = PUPILS.length - nP;
   const q = url + (url.indexOf('?')<0?'?':'&') +
     'cls='  + encodeURIComponent(activeClass) +
     '&date='+ encodeURIComponent(ddmm()) +
     '&present=' + encodeURIComponent(presentNames.join('|'));
-  window.open(q, '_blank');
-  $('#attSaved').textContent = 'Opening Google Sheet…'; sfx.star();
-  setTimeout(()=>{ $('#attSaved').textContent=''; }, 3000);
+  // Send in the background WITHOUT the browser's Google login (cross-origin fetch omits
+  // cookies), so it always counts as "Anyone" — works no matter which Google account the
+  // browser is signed into. We can't read the opaque response, so we confirm from what we sent.
+  $('#attSaved').textContent = 'Sending to Google Sheet…';
+  fetch(q, {method:'GET', mode:'no-cors', cache:'no-store'})
+    .then(()=>{
+      $('#attSaved').textContent = '✓ Sent — '+activeClass+' '+ddmm()+' · '+nP+' present, '+nA+' absent';
+      sfx.star();
+      setTimeout(()=>{ $('#attSaved').textContent=''; }, 6000);
+    })
+    .catch(()=>{
+      $('#attSaved').textContent = 'Could not reach the sheet — check your internet connection.';
+    });
 };
 
 let pickFilter='all', pickNoRepeat=true, pickPool=[], picking=false;
