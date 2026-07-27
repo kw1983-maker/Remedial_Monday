@@ -1276,7 +1276,7 @@ function exportAttendanceXlsx(){
 $('#attExcel').onclick = exportAttendanceXlsx;
 
 /* ---- Send attendance straight to the Google Sheet (via a Google Apps Script web app) ---- */
-const sheetUrlKey = 'l1sw_sheet_url';
+const sheetUrlKey = 'l1sw_sheet_url_v2';  // bumped so any old/stale saved link is ignored → falls back to the built-in URL below
 // Baked-in default so every browser/device works without pasting. The ⚙️ button still overrides it.
 const DEFAULT_SHEET_URL = 'https://script.google.com/macros/s/AKfycbyMO_fXEAmdRksSfr2ArkvR1OTS1rUQvgJjTvUCebVGC9JxpfJUF7w1jjz9N7yYqku8Cg/exec';
 function getSheetUrl(forcePrompt){
