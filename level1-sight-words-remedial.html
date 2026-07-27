@@ -341,9 +341,11 @@ footer{text-align:center; color:#4b3f7a; font-weight:bold; margin-top:20px}
     </div>
     <div class="row" style="justify-content:flex-start; margin-bottom:6px">
       <button class="btn alt" id="attAllPresent">✅ All present</button>
-      <button class="btn sun" id="attExcel">⬇️ Download Excel</button>
+      <button class="btn sun" id="attSend">📤 Send to Google Sheet</button>
+      <button class="btn ghost" id="attExcel">⬇️ Download Excel</button>
       <button class="btn ghost" id="attCopy">📋 Copy list</button>
       <button class="btn ghost" id="attReset">🔄 New day</button>
+      <button class="btn ghost" id="attLinkSet" title="Set / change the Google Sheet link">⚙️</button>
       <span class="prog" id="attSaved"></span>
     </div>
     <div id="attendGroups"></div>
@@ -1272,6 +1274,41 @@ function exportAttendanceXlsx(){
   setTimeout(()=>{ $('#attSaved').textContent=''; }, 2500);
 }
 $('#attExcel').onclick = exportAttendanceXlsx;
+
+/* ---- Send attendance straight to the Google Sheet (via a Google Apps Script web app) ---- */
+const sheetUrlKey = 'l1sw_sheet_url';
+function getSheetUrl(forcePrompt){
+  let url = '';
+  try{ url = localStorage.getItem(sheetUrlKey) || ''; }catch(e){}
+  if(forcePrompt || !url){
+    const entered = prompt(
+      'Paste your Google Sheet link (the Apps Script web-app URL that ends with /exec).\n\n'+
+      'You only set this once — it is saved on this device.', url || 'https://script.google.com/macros/s/…/exec');
+    if(entered===null) return url;               // cancelled — keep whatever we had
+    url = entered.trim();
+    try{ localStorage.setItem(sheetUrlKey, url); }catch(e){}
+  }
+  return url;
+}
+// today's date as d/m (no leading zeros) to match the sheet column headers, e.g. "27/7"
+function ddmm(){ const d=new Date(); return d.getDate()+'/'+(d.getMonth()+1); }
+$('#attLinkSet').onclick = ()=>{
+  getSheetUrl(true);
+  $('#attSaved').textContent = 'Google Sheet link saved ✓';
+  setTimeout(()=>{ $('#attSaved').textContent=''; }, 2500);
+};
+$('#attSend').onclick = ()=>{
+  const url = getSheetUrl(false);
+  if(!url){ $('#attSaved').textContent = 'No Google Sheet link set — tap ⚙️ first.'; return; }
+  const presentNames = PUPILS.filter((p,i)=>present[i]).map(p=>p.n);
+  const q = url + (url.indexOf('?')<0?'?':'&') +
+    'cls='  + encodeURIComponent(activeClass) +
+    '&date='+ encodeURIComponent(ddmm()) +
+    '&present=' + encodeURIComponent(presentNames.join('|'));
+  window.open(q, '_blank');
+  $('#attSaved').textContent = 'Opening Google Sheet…'; sfx.star();
+  setTimeout(()=>{ $('#attSaved').textContent=''; }, 3000);
+};
 
 let pickFilter='all', pickNoRepeat=true, pickPool=[], picking=false;
 function pupilsFor(){ return pickFilter==='all' ? PUPILS : PUPILS.filter(p=>p.g===+pickFilter); }
