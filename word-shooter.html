@@ -74,13 +74,31 @@
         .leaderboard-list li {
             border-bottom: 1px solid #333; padding: 10px 0; display: flex; justify-content: space-between;
         }
+
+        #game-controls {
+            position: absolute; top: 10px; right: 10px; z-index: 30;
+            display: flex; gap: 8px; pointer-events: auto;
+        }
+        .icon-btn {
+            width: 40px; height: 40px; padding: 0; margin: 0;
+            display: flex; align-items: center; justify-content: center;
+            background: rgba(5, 10, 20, 0.6); border: 2px solid #00eaff; border-radius: 50%;
+            clip-path: none; color: #fff; font-size: 18px; line-height: 1;
+            cursor: pointer; transition: all 0.2s;
+        }
+        .icon-btn:hover { transform: scale(1.1); background: rgba(0, 234, 255, 0.25); }
     </style>
 </head>
 <body>
 
     <div id="game-container">
         <canvas id="gameCanvas"></canvas>
-        
+
+        <div id="game-controls">
+            <button id="btn-fullscreen" class="icon-btn" title="Fullscreen" aria-label="Toggle fullscreen">⛶</button>
+            <button id="btn-exit" class="icon-btn" title="Exit to menu" aria-label="Exit to menu">✕</button>
+        </div>
+
         <div id="ui-layer">
             <div class="hud-bar">
                 <div class="score-box">SCORE: <span id="score-val">0</span></div>
@@ -308,6 +326,33 @@
     document.getElementById('btn-replay').addEventListener('click', () => {
         if(currentTarget) speakWord(currentTarget.word);
     });
+
+    // --- EXIT + FULLSCREEN CONTROLS ---
+    document.getElementById('btn-exit').addEventListener('click', () => {
+        isFiring = false;
+        showSetScreen();
+    });
+
+    const btnFullscreen = document.getElementById('btn-fullscreen');
+    function toggleFullscreen() {
+        const el = document.getElementById('game-container');
+        if(!document.fullscreenElement && !document.webkitFullscreenElement) {
+            const req = el.requestFullscreen || el.webkitRequestFullscreen;
+            if(req) req.call(el);
+        } else {
+            const exit = document.exitFullscreen || document.webkitExitFullscreen;
+            if(exit) exit.call(document);
+        }
+    }
+    function onFullscreenChange() {
+        const active = !!(document.fullscreenElement || document.webkitFullscreenElement);
+        btnFullscreen.textContent = active ? '⤦' : '⛶';
+        btnFullscreen.title = active ? 'Exit Fullscreen' : 'Fullscreen';
+        btnFullscreen.setAttribute('aria-label', btnFullscreen.title);
+    }
+    btnFullscreen.addEventListener('click', toggleFullscreen);
+    document.addEventListener('fullscreenchange', onFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', onFullscreenChange);
 
     // --- GAMEPLAY FUNCTIONS ---
     function startGame() {
