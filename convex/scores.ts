@@ -1,4 +1,4 @@
-import { mutation, query } from "./_generated/server";
+import { internalMutation, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 
 const MAX_NAME_LENGTH = 40;
@@ -117,5 +117,35 @@ export const leaderboard = query({
     return Array.from(bestByName.values())
       .sort((a, b) => b.score - a.score || b.createdAt - a.createdAt)
       .slice(0, limit);
+  },
+});
+
+/** CLI-only cleanup: npx convex run scores:removeByNames '{"game":"word-shooter","names":["Danial","Aina"]}' */
+export const removeByNames = internalMutation({
+  args: {
+    game: v.string(),
+    names: v.array(v.string()),
+  },
+  returns: v.number(),
+  handler: async (ctx, args) => {
+    const targets = new Set(
+      args.names.map((n) => cleanName(n).toLowerCase()).filter(Boolean)
+    );
+    if (targets.size === 0) return 0;
+
+    const rows = await ctx.db
+      .query("scores")
+      .withIndex("by_game_and_score", (q) => q.eq("game", args.game.trim()))
+      .order("desc")
+      .take(500);
+
+    let removed = 0;
+    for (const row of rows) {
+      if (targets.has(row.pupilName.toLowerCase())) {
+        await ctx.db.delete(row._id);
+        removed += 1;
+      }
+    }
+    return removed;
   },
 });

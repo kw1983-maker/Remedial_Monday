@@ -358,7 +358,7 @@
             const isMe = me && row.pupilName.toLowerCase() === me;
             return `<li class="${isMe ? "me" : ""}">
                 <span class="rank">#${i + 1}</span>
-                <span class="pname">${escapeHtml(row.pupilName)}${isMe ? " (you)" : ""}</span>
+                <span class="pname">${escapeHtml(row.pupilName)}</span>
                 <span class="pts">${row.score}</span>
             </li>`;
         }).join("");
