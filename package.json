@@ -1,0 +1,13 @@
+{
+  "name": "remedial-monday",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "npx convex dev",
+    "convex:dev": "npx convex dev"
+  },
+  "dependencies": {
+    "convex": "^1.25.0"
+  }
+}

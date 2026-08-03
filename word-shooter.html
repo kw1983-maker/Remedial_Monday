@@ -69,11 +69,17 @@
 
         .leaderboard-list {
             list-style: none; padding: 0; margin: 0 0 20px 0; width: 100%; text-align: left;
-            font-family: 'Roboto Mono', monospace; font-size: 16px; max-height: 250px; overflow-y: auto; color: white;
+            font-family: 'Roboto Mono', monospace; font-size: 16px; max-height: 220px; overflow-y: auto; color: white;
         }
         .leaderboard-list li {
-            border-bottom: 1px solid #333; padding: 10px 0; display: flex; justify-content: space-between;
+            border-bottom: 1px solid #333; padding: 10px 0; display: flex; justify-content: space-between; gap: 10px;
         }
+        .leaderboard-list li .rank { color: #00eaff; min-width: 28px; }
+        .leaderboard-list li .pname { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .leaderboard-list li .pts { color: #ffcc00; font-weight: bold; }
+        .leaderboard-list li.me { color: #06d6a0; border-bottom-color: #065; }
+        .leaderboard-list li.me .pts { color: #06d6a0; }
+        #set-screen, #game-over-screen { max-height: 92vh; overflow-y: auto; }
 
         #game-controls {
             position: absolute; top: 10px; right: 10px; z-index: 30;
@@ -117,16 +123,32 @@
             <!-- Word Set Select Screen (start) -->
             <div id="set-screen" class="modal">
                 <h1 style="font-size: 30px;">WORD SHOOTER 🔊</h1>
-                <p style="color:#aaa; font-size:14px; margin:0 0 15px; line-height:1.6;">
+                <p style="color:#aaa; font-size:14px; margin:0 0 12px; line-height:1.6;">
                     Listen and shoot the correct word!<br><strong>CLICK & HOLD TO SHOOT.</strong>
                 </p>
+                <label for="pupil-name" style="color:#00eaff; font-size:13px; letter-spacing:1px; margin-bottom:6px;">YOUR NAME</label>
+                <input id="pupil-name" type="text" maxlength="40" placeholder="Type your name" autocomplete="nickname" />
+                <p id="name-hint" style="color:#ff6688; font-size:12px; margin:0 0 10px; min-height:16px;"></p>
                 <div id="set-buttons" style="width:100%;"></div>
+                <div style="width:100%; margin-top:18px;">
+                    <div style="color:#00eaff; font-size:13px; letter-spacing:2px; margin-bottom:8px;">🏆 LEADERBOARD</div>
+                    <ul id="start-leaderboard" class="leaderboard-list">
+                        <li style="justify-content:center; color:#666;">Loading…</li>
+                    </ul>
+                </div>
             </div>
 
             <!-- Game Over Screen -->
             <div id="game-over-screen" class="modal hidden">
                 <h1 style="color: #ff3333; -webkit-text-fill-color: #ff3333;">GAME OVER</h1>
-                <p id="final-score" style="font-size: 20px; margin-bottom: 20px;">SCORE: 0</p>
+                <p id="final-score" style="font-size: 20px; margin-bottom: 8px;">SCORE: 0</p>
+                <p id="save-status" style="color:#aaa; font-size:13px; margin:0 0 12px; min-height:18px;"></p>
+                <div style="width:100%;">
+                    <div style="color:#00eaff; font-size:13px; letter-spacing:2px; margin-bottom:8px;">🏆 LEADERBOARD</div>
+                    <ul id="end-leaderboard" class="leaderboard-list">
+                        <li style="justify-content:center; color:#666;">Loading…</li>
+                    </ul>
+                </div>
                 <button id="btn-retry">PLAY AGAIN</button>
                 <button id="btn-newwords" class="btn-alt">CHOOSE WORDS</button>
             </div>
@@ -134,6 +156,39 @@
 
         <div id="levelup-msg" class="notification">WEAPON UPGRADE!</div>
     </div>
+
+<script src="convex-url.js"></script>
+<script type="module">
+    import { ConvexHttpClient } from "https://esm.sh/convex@1.25.4/browser";
+    import { anyApi } from "https://esm.sh/convex@1.25.4/server";
+
+    const GAME_ID = "word-shooter";
+    const url = (typeof window.CONVEX_URL === "string" && window.CONVEX_URL.trim())
+        ? window.CONVEX_URL.trim()
+        : "http://127.0.0.1:3210";
+
+    const client = new ConvexHttpClient(url);
+
+    window.GameScores = {
+        ready: true,
+        url,
+        async submit(pupilName, score, wordSet) {
+            return await client.mutation(anyApi.scores.submit, {
+                pupilName,
+                score,
+                game: GAME_ID,
+                wordSet: wordSet || undefined,
+            });
+        },
+        async leaderboard(limit = 10) {
+            return await client.query(anyApi.scores.leaderboard, {
+                game: GAME_ID,
+                limit,
+            });
+        },
+    };
+    window.dispatchEvent(new Event("gameScoresReady"));
+</script>
 
 <!-- GAME LOGIC -->
 <script>
@@ -264,9 +319,129 @@
     let currentQuestion = null; let enemies = []; let bullets =[]; let particles = []; let clouds =[];
     let isFiring = false; let lastShotFrame = 0; const fireRate = 8;
     let scoreSavedThisRound = false;
+    let pupilName = "";
     // --- "juice" state: combos, screen shake, popups, rings, stars, flashes ---
     let combo = 0; let shakeTime = 0; let shakeMag = 0; let muzzleFlash = 0; let flashTime = 0;
     let rings = []; let popups = []; let stars = [];
+
+    const nameInput = document.getElementById('pupil-name');
+    const nameHint = document.getElementById('name-hint');
+    try {
+        const savedName = localStorage.getItem('wordShooterPupilName');
+        if (savedName) nameInput.value = savedName;
+    } catch (e) { /* ignore */ }
+
+    function getPupilName() {
+        return String(nameInput.value || "").trim().replace(/\s+/g, " ").slice(0, 40);
+    }
+
+    function requirePupilName() {
+        pupilName = getPupilName();
+        if (!pupilName) {
+            nameHint.textContent = "Please type your name first.";
+            nameInput.focus();
+            return false;
+        }
+        nameHint.textContent = "";
+        try { localStorage.setItem('wordShooterPupilName', pupilName); } catch (e) { /* ignore */ }
+        return true;
+    }
+
+    function renderLeaderboard(listEl, rows, highlightName) {
+        if (!listEl) return;
+        if (!rows || rows.length === 0) {
+            listEl.innerHTML = '<li style="justify-content:center; color:#666;">No scores yet — be first!</li>';
+            return;
+        }
+        const me = (highlightName || "").trim().toLowerCase();
+        listEl.innerHTML = rows.map((row, i) => {
+            const isMe = me && row.pupilName.toLowerCase() === me;
+            return `<li class="${isMe ? "me" : ""}">
+                <span class="rank">#${i + 1}</span>
+                <span class="pname">${escapeHtml(row.pupilName)}${isMe ? " (you)" : ""}</span>
+                <span class="pts">${row.score}</span>
+            </li>`;
+        }).join("");
+    }
+
+    function escapeHtml(text) {
+        return String(text)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;");
+    }
+
+    async function loadLeaderboards(highlightName) {
+        const startList = document.getElementById('start-leaderboard');
+        const endList = document.getElementById('end-leaderboard');
+        const markLoading = (el) => {
+            if (el) el.innerHTML = '<li style="justify-content:center; color:#666;">Loading…</li>';
+        };
+        markLoading(startList);
+        markLoading(endList);
+
+        if (!window.GameScores || !window.GameScores.ready) {
+            const wait = () => new Promise((resolve) => {
+                window.addEventListener('gameScoresReady', resolve, { once: true });
+                setTimeout(resolve, 2500);
+            });
+            await wait();
+        }
+        if (!window.GameScores || !window.GameScores.leaderboard) {
+            const msg = '<li style="justify-content:center; color:#666;">Leaderboard offline</li>';
+            if (startList) startList.innerHTML = msg;
+            if (endList) endList.innerHTML = msg;
+            return;
+        }
+
+        try {
+            const rows = await window.GameScores.leaderboard(10);
+            renderLeaderboard(startList, rows, highlightName);
+            renderLeaderboard(endList, rows, highlightName);
+        } catch (err) {
+            console.error("Leaderboard load failed:", err);
+            const msg = '<li style="justify-content:center; color:#ff6688;">Could not load scores</li>';
+            if (startList) startList.innerHTML = msg;
+            if (endList) endList.innerHTML = msg;
+        }
+    }
+
+    async function saveScoreIfNeeded() {
+        const statusEl = document.getElementById('save-status');
+        if (scoreSavedThisRound) return;
+        scoreSavedThisRound = true;
+
+        const name = pupilName || getPupilName();
+        if (!name) {
+            if (statusEl) statusEl.textContent = "Enter your name next time to save your score.";
+            return;
+        }
+        if (!window.GameScores || !window.GameScores.submit) {
+            if (statusEl) statusEl.textContent = "Could not save score (offline).";
+            return;
+        }
+        if (statusEl) statusEl.textContent = "Saving score…";
+        try {
+            const result = await window.GameScores.submit(name, score, currentSetId);
+            if (statusEl) {
+                statusEl.textContent = result && result.isNewBest
+                    ? "New personal best saved! 🎉"
+                    : "Score saved!";
+            }
+            await loadLeaderboards(name);
+        } catch (err) {
+            console.error("Score save failed:", err);
+            scoreSavedThisRound = false;
+            if (statusEl) statusEl.textContent = "Could not save score. Check connection.";
+        }
+    }
+
+    nameInput.addEventListener('input', () => {
+        if (getPupilName()) nameHint.textContent = "";
+    });
+    loadLeaderboards(getPupilName());
+    window.addEventListener('gameScoresReady', () => loadLeaderboards(getPupilName()));
 
     function shake(mag) { shakeTime = 12; shakeMag = mag; }
     function addPopup(x, y, text, color) { popups.push({ x, y, text, color, life: 1 }); }
@@ -305,6 +480,7 @@
             b.style.marginBottom = '14px';
             b.innerText = s.label;
             b.addEventListener('click', () => {
+                if (!requirePupilName()) return;
                 currentSetId = s.id;
                 AudioEngine.init();
                 document.getElementById('set-screen').classList.add('hidden');
@@ -318,10 +494,17 @@
         document.getElementById('game-over-screen').classList.add('hidden');
         document.getElementById('set-screen').classList.remove('hidden');
         gameState = "start";
+        loadLeaderboards(getPupilName());
     }
     buildSetButtons();
 
-    document.getElementById('btn-retry').addEventListener('click', startGame);
+    document.getElementById('btn-retry').addEventListener('click', () => {
+        if (!requirePupilName()) {
+            showSetScreen();
+            return;
+        }
+        startGame();
+    });
     document.getElementById('btn-newwords').addEventListener('click', showSetScreen);
     document.getElementById('btn-replay').addEventListener('click', () => {
         if(currentTarget) speakWord(currentTarget.word);
@@ -361,6 +544,8 @@
         document.getElementById('game-over-screen').classList.add('hidden');
 
         score = 0; health = 100; weaponLevel = 1; scoreSavedThisRound = false;
+        const saveStatus = document.getElementById('save-status');
+        if (saveStatus) saveStatus.textContent = "";
         enemies = []; bullets =[]; particles =[]; clouds =[]; rings = []; popups = [];
         combo = 0; shakeTime = 0; muzzleFlash = 0; flashTime = 0;
         player.x = canvas.width / 2; player.targetX = canvas.width / 2;
@@ -600,6 +785,7 @@
             gameState = "gameover";
             document.getElementById('game-over-screen').classList.remove('hidden');
             document.getElementById('final-score').innerText = "FINAL SCORE: " + score;
+            saveScoreIfNeeded();
         }
     }
 
