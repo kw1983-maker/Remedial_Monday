@@ -1,5 +1,6 @@
 {
   "rewrites": [
-    { "source": "/", "destination": "/level1-sight-words-remedial.html" }
+    { "source": "/", "destination": "/level1-sight-words-remedial.html" },
+    { "source": "/level2", "destination": "/level2-word-workshop-remedial.html" }
   ]
 }
