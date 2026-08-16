@@ -237,11 +237,58 @@ body.audio-off #aTarget{display:block}
 .modeBtn.active{background:#7c3aed; color:#fff; border-color:#fff}
 
 /* Teaching slideshow */
-#slideshow{padding:16px}
+#slideshow{padding:16px; position:relative}
 .slideStage{background:#0f172a; border-radius:18px; overflow:hidden; display:flex; justify-content:center;
   align-items:center; min-height:180px}
-.slideStage img{width:100%; height:auto; display:block; max-height:74vh; object-fit:contain}
+.slideStage img{width:100%; height:auto; display:block; max-height:74vh; object-fit:contain; cursor:zoom-in}
 .slideControls{display:flex; flex-wrap:wrap; gap:10px; align-items:center; justify-content:center; margin-top:14px}
+.slideFsExit{
+  display:none; position:absolute; top:12px; right:12px; z-index:6;
+  cursor:pointer; border:none; font-family:inherit; font-weight:bold; font-size:16px; color:#fff;
+  background:#ef4444; border-radius:999px; padding:10px 16px; min-height:44px;
+  box-shadow:0 4px 0 #991b1b, 0 8px 18px rgba(0,0,0,.35);
+}
+.slideFsExit:active{transform:translateY(3px); box-shadow:0 1px 0 #991b1b}
+.slideFsExit:focus-visible{outline:none; box-shadow:var(--focus)}
+
+/* Full-screen teaching slide (browser fullscreen + CSS fallback) */
+#slideshow:fullscreen,
+#slideshow:-webkit-full-screen,
+body.slide-fs #slideshow{
+  width:100%; height:100%; max-width:none; margin:0; padding:0;
+  border:none; border-radius:0; box-shadow:none; background:#0f172a;
+  display:flex; flex-direction:column;
+}
+#slideshow:fullscreen .slideStage,
+#slideshow:-webkit-full-screen .slideStage,
+body.slide-fs .slideStage{
+  flex:1; min-height:0; border-radius:0; background:#000;
+}
+#slideshow:fullscreen .slideStage img,
+#slideshow:-webkit-full-screen .slideStage img,
+body.slide-fs .slideStage img{
+  width:100%; height:100%; max-height:none; object-fit:contain; cursor:default;
+}
+#slideshow:fullscreen .slideControls,
+#slideshow:-webkit-full-screen .slideControls,
+body.slide-fs .slideControls{
+  margin:0; padding:12px 14px 16px; background:rgba(15,23,42,.94);
+}
+#slideshow:fullscreen .slideFsExit,
+#slideshow:-webkit-full-screen .slideFsExit,
+body.slide-fs .slideFsExit{display:inline-flex; align-items:center; gap:6px}
+#slideshow:fullscreen #slideFsEnter,
+#slideshow:-webkit-full-screen #slideFsEnter,
+body.slide-fs #slideFsEnter{display:none}
+body.slide-fs{overflow:hidden}
+body.slide-fs header,
+body.slide-fs #playView,
+body.slide-fs footer,
+body.slide-fs #pickFab{display:none !important}
+body.slide-fs #teachView{
+  position:fixed; inset:0; z-index:8000; max-width:none; padding:0; margin:0; background:#0f172a;
+}
+body.slide-fs #slideshow{height:100%}
 
 /* Word Shooter embed */
 .gameFrameWrap{
@@ -303,13 +350,15 @@ footer{text-align:center; color:#4b3f7a; font-weight:bold; margin-top:20px}
 <!-- TEACH VIEW: the lesson slides -->
 <div id="teachView" class="wrap">
   <section id="slideshow">
+    <button type="button" class="slideFsExit" id="slideFsExit" title="Exit full screen" aria-label="Exit full screen">✕ Exit</button>
     <div class="slideStage">
-      <img id="slideImg" alt="Teaching slide" />
+      <img id="slideImg" alt="Teaching slide" title="Click to show the slide full screen" />
     </div>
     <div class="slideControls">
       <button class="btn ghost" id="slidePrev">◀ Back</button>
       <span class="prog" id="slideCount">Slide 1 of 15</span>
       <button class="btn" id="slideNext">Next ▶</button>
+      <button class="btn ghost" id="slideFsEnter" aria-pressed="false">⛶ Full screen</button>
       <button class="btn sun" id="slideToPlay">🎮 Let's Play!</button>
     </div>
   </section>
@@ -1496,8 +1545,60 @@ function showSlide(){
 $('#slidePrev').onclick = ()=>{ if(slideIdx>0){ slideIdx--; showSlide(); sfx.pop(); } };
 $('#slideNext').onclick = ()=>{ if(slideIdx<SLIDES.length-1){ slideIdx++; showSlide(); sfx.pop(); } };
 $('#slideToPlay').onclick = ()=>setMode('play');
+
+function isSlideFs(){
+  const el = $('#slideshow');
+  return document.body.classList.contains('slide-fs')
+    || document.fullscreenElement===el
+    || document.webkitFullscreenElement===el;
+}
+function enterSlideFs(){
+  document.body.classList.add('slide-fs');
+  $('#slideFsEnter').setAttribute('aria-pressed','true');
+  const el = $('#slideshow');
+  const req = el.requestFullscreen || el.webkitRequestFullscreen;
+  if(req){
+    try{
+      const p = req.call(el);
+      if(p && p.catch) p.catch(()=>{});
+    }catch(_err){}
+  }
+}
+function exitSlideFs(){
+  document.body.classList.remove('slide-fs');
+  $('#slideFsEnter').setAttribute('aria-pressed','false');
+  const native = document.fullscreenElement || document.webkitFullscreenElement;
+  if(native){
+    const exit = document.exitFullscreen || document.webkitExitFullscreen;
+    if(exit){
+      try{
+        const p = exit.call(document);
+        if(p && p.catch) p.catch(()=>{});
+      }catch(_err){}
+    }
+  }
+}
+function toggleSlideFs(){
+  if(isSlideFs()) exitSlideFs(); else enterSlideFs();
+}
+$('#slideFsEnter').onclick = ()=>{ toggleSlideFs(); sfx.pop(); };
+$('#slideFsExit').onclick = ()=>{ exitSlideFs(); sfx.pop(); };
+$('#slideImg').onclick = ()=>{ if(!isSlideFs()){ enterSlideFs(); sfx.pop(); } };
+document.addEventListener('fullscreenchange', ()=>{
+  if(!(document.fullscreenElement || document.webkitFullscreenElement)){
+    document.body.classList.remove('slide-fs');
+    $('#slideFsEnter').setAttribute('aria-pressed','false');
+  }
+});
+document.addEventListener('webkitfullscreenchange', ()=>{
+  if(!(document.fullscreenElement || document.webkitFullscreenElement)){
+    document.body.classList.remove('slide-fs');
+    $('#slideFsEnter').setAttribute('aria-pressed','false');
+  }
+});
 document.addEventListener('keydown', e=>{
   if($('#teachView').style.display==='none') return;
+  if(e.key==='Escape' && isSlideFs()){ exitSlideFs(); return; }
   if(e.key==='ArrowRight') $('#slideNext').click();
   if(e.key==='ArrowLeft') $('#slidePrev').click();
 });
@@ -1512,7 +1613,7 @@ function setMode(mode){
   $('#modeTeach').setAttribute('aria-selected', teach?'true':'false');
   $('#modePlay').setAttribute('aria-selected', !teach?'true':'false');
   $('#pickFab').style.display = teach ? 'none' : 'block';
-  if(!teach) setPicker(false);
+  if(!teach){ setPicker(false); exitSlideFs(); }
   if(teach) showSlide();
   window.scrollTo({top:0});
 }
