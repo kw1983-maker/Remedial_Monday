@@ -1,4 +1,5 @@
 *.pdf
+!YES_2026_V2.pdf
 _slides/
 .vercel/
 .DS_Store
