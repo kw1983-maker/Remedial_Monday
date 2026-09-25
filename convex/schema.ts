@@ -11,4 +11,9 @@ export default defineSchema({
   })
     .index("by_game_and_score", ["game", "score"])
     .index("by_game_and_name", ["game", "pupilName"]),
+
+  // One row per Story Maker request — used only to rate-limit OpenRouter spend.
+  aiCalls: defineTable({
+    createdAt: v.number(),
+  }).index("by_createdAt", ["createdAt"]),
 });

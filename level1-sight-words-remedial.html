@@ -336,6 +336,15 @@ footer{text-align:center; color:#4b3f7a; font-weight:bold; margin-top:20px}
   .pic:hover,.opt:hover,nav a:hover{transform:none !important}
   .tile.justFilled{animation:none !important}
 }
+/* Story Maker (AI sentences via Convex + OpenRouter) */
+.storyOpts{display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:0 0 12px}
+.storyList{display:grid; gap:10px; margin-top:14px}
+.storyCard{display:flex; align-items:center; gap:12px; background:#fff; border:3px solid #ede9fe;
+  border-radius:16px; padding:12px 14px; font-size:24px; font-weight:bold; color:#3b2f63}
+.storyCard .listen-btn{width:auto; flex:none; font-size:16px; margin:0}
+.storyCard mark{background:#fef08a; color:inherit; border-radius:6px; padding:0 4px}
+.storyMsg{margin-top:12px; font-size:17px; color:#564b7d}
+.storyMsg.err{color:#b91c1c; font-weight:bold}
 </style>
 </head>
 <body>
@@ -402,6 +411,7 @@ footer{text-align:center; color:#4b3f7a; font-weight:bold; margin-top:20px}
     <a href="#actC">🖼️ Pick It</a>
     <a href="#actD">✏️ Spell It</a>
     <a href="#actE">🧩 Build a Sentence</a>
+    <a href="#actG">📖 Story Maker</a>
     <a href="#actF">🎯 Word Shooter</a>
   </div>
 </nav>
@@ -572,6 +582,24 @@ footer{text-align:center; color:#4b3f7a; font-weight:bold; margin-top:20px}
       <span class="prog" id="eProg">Sentence 0 of 15</span>
     </div>
     <div class="win" id="eWin" role="status">🏆 Super! You built every sentence! 🏆</div>
+  </section>
+
+  <section id="actG">
+    <h2>📖 Story Maker <span class="tag">new sentences every time!</span></h2>
+    <p class="lead">Choose the words, then press <b>✨ Make it!</b> The computer writes easy sentences with our words. Tap <b>🔊</b> to listen, then read them out loud.</p>
+    <div class="setbar actbar" id="gSets" role="group" aria-label="Choose words for Story Maker">
+      <span class="setbar-label">Words:</span>
+    </div>
+    <div class="storyOpts" role="group" aria-label="Sentences or a mini story">
+      <button type="button" class="setBtn active" data-kind="sentences" aria-pressed="true">✏️ Sentences</button>
+      <button type="button" class="setBtn" data-kind="story" aria-pressed="false">📖 Mini story</button>
+    </div>
+    <div class="row">
+      <button class="btn sun" id="gMake">✨ Make it!</button>
+      <button class="btn ghost" id="gReadAll" disabled>🔊 Read it all</button>
+    </div>
+    <div class="storyMsg" id="gMsg" role="status" aria-live="polite"></div>
+    <div class="storyList" id="gList"></div>
   </section>
 
   <section id="actF">
@@ -1814,6 +1842,73 @@ $('#eSay').onclick=()=>{ if(eIdx>=0&&eIdx<eOrder.length) speak(SENTENCES[eOrder[
 
 buildWall(); buildWheel(); buildA(); buildC(); buildD(); buildE();
 setMode('teach');
+</script>
+<script src="convex-url.js"></script>
+<script type="module" src="ai-client.js"></script>
+<script>
+/* ---- Story Maker: AI sentences from the chosen word set ---- */
+(function(){
+  const LEVEL = 1;
+  let gPool = ITEMS.slice(), gKind = 'sentences', gSentences = [], gBusy = false;
+  const gSets = $('#gSets'), gMsg = $('#gMsg'), gList = $('#gList');
+
+  gSets.insertAdjacentHTML('beforeend', WORD_SETS.map((s,i)=>
+    `<button type="button" class="setBtn${i?'':' active'}" data-set="${s.id}" aria-pressed="${i?'false':'true'}">${s.label}</button>`).join(''));
+  function pickOne(bar, btn){
+    bar.querySelectorAll('.setBtn').forEach(x=>{
+      const on = x===btn; x.classList.toggle('active', on); x.setAttribute('aria-pressed', on?'true':'false');
+    });
+    sfx.pop();
+  }
+  gSets.querySelectorAll('.setBtn').forEach(b=>{
+    b.onclick=()=>{ pickOne(gSets, b); gPool = itemsForSet(b.dataset.set); };
+  });
+  const opts = document.querySelector('#actG .storyOpts');
+  opts.querySelectorAll('.setBtn').forEach(b=>{
+    b.onclick=()=>{ pickOne(opts, b); gKind = b.dataset.kind; };
+  });
+
+  const esc = s => s.replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  function highlight(sentence){
+    const words = gPool.map(it=>it.word.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'));
+    const re = new RegExp(`\\b(${words.join('|')})\\b`, 'gi');
+    return esc(sentence).replace(re, '<mark>$1</mark>');
+  }
+  function render(){
+    gList.innerHTML = gSentences.map((s,i)=>
+      `<div class="storyCard"><button class="listen-btn" data-i="${i}" aria-label="Listen: ${esc(s)}">🔊</button><span>${highlight(s)}</span></div>`).join('');
+    gList.querySelectorAll('.listen-btn').forEach(b=>{ b.onclick=()=>speak(gSentences[+b.dataset.i]); });
+    $('#gReadAll').disabled = gSentences.length === 0;
+  }
+
+  $('#gMake').onclick = async ()=>{
+    if(gBusy) return;
+    if(!window.StoryAI){ gMsg.className='storyMsg err'; gMsg.textContent='Story Maker is still loading. Try again in a moment.'; return; }
+    gBusy = true; $('#gMake').disabled = true;
+    gMsg.className = 'storyMsg'; gMsg.textContent = '✨ Thinking of sentences…';
+    try{
+      const res = await window.StoryAI.generate(gPool.map(it=>it.word), gKind, LEVEL);
+      gSentences = res.sentences;
+      // Register server-made clips so speak() plays them like the built-in words.
+      res.audio.forEach((uri,i)=>{ if(uri) AUDIO[gSentences[i]] = uri; });
+      gMsg.textContent = gKind==='story' ? '📖 Here is your story! Read it together.' : '✏️ Here are your sentences! Read them out loud.';
+      render(); sfx.pop();
+    }catch(e){
+      console.error(e);
+      gMsg.className = 'storyMsg err';
+      gMsg.textContent = '😅 Story Maker could not make it this time. Ask your teacher to try again.';
+    }finally{
+      gBusy = false; $('#gMake').disabled = false;
+    }
+  };
+  // Read each sentence in turn, chaining on the clip's end.
+  function readFrom(i){
+    if(i >= gSentences.length) return;
+    speak(gSentences[i]);
+    if(AUDIO[gSentences[i]] && ttsAudio) ttsAudio.onended = ()=>readFrom(i+1);
+  }
+  $('#gReadAll').onclick = ()=>readFrom(0);
+})();
 </script>
 </body>
 </html>
