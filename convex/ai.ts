@@ -71,23 +71,44 @@ async function ttsDataUri(text: string): Promise<string | null> {
   }
 }
 
-function parseSentences(text: string): string[] {
+function parseReply(text: string): { sentences: string[]; scene: string | null } {
   const stripped = text.replace(/```(?:json)?/gi, "").trim();
   let list: unknown = null;
+  let scene: unknown = null;
   try {
     const start = stripped.indexOf("{");
     const end = stripped.lastIndexOf("}");
-    list = JSON.parse(stripped.slice(start, end + 1)).sentences;
+    const parsed = JSON.parse(stripped.slice(start, end + 1));
+    list = parsed.sentences;
+    scene = parsed.picture;
   } catch {
     // Fall back to one sentence per line.
     list = stripped.split(/\n+/);
   }
-  if (!Array.isArray(list)) return [];
-  return list
-    .filter((s): s is string => typeof s === "string")
-    .map((s) => s.replace(/^[\s\-*\d.)]+/, "").trim())
-    .filter((s) => s.length > 0 && s.length <= MAX_SENTENCE_LENGTH)
-    .slice(0, MAX_SENTENCES);
+  const sentences = !Array.isArray(list)
+    ? []
+    : list
+        .filter((s): s is string => typeof s === "string")
+        .map((s) => s.replace(/^[\s\-*\d.)]+/, "").trim())
+        .filter((s) => s.length > 0 && s.length <= MAX_SENTENCE_LENGTH)
+        .slice(0, MAX_SENTENCES);
+  return {
+    sentences,
+    scene: typeof scene === "string" && scene.trim() ? scene.trim().slice(0, 300) : null,
+  };
+}
+
+/**
+ * Free Pollinations image (no key; the browser loads the URL directly).
+ * The story model writes a concrete scene description to make up for the
+ * free model's weaker prompt-following.
+ */
+function pictureUrl(scene: string): string {
+  const prompt =
+    `${scene}. Cute children's picture book illustration, simple flat 2D cartoon, ` +
+    "bright colours, plain background, animals on four legs, no text.";
+  const seed = Math.floor(Math.random() * 1_000_000);
+  return `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=1024&height=576&seed=${seed}&safe=true`;
 }
 
 /**
@@ -104,6 +125,8 @@ export const generateStory = action({
     sentences: v.array(v.string()),
     // One mp3 data URI per sentence (null if TTS failed; page falls back).
     audio: v.array(v.union(v.string(), v.null())),
+    // Pollinations image URL for mini stories; null in sentences mode.
+    picture: v.union(v.string(), v.null()),
   }),
   handler: async (ctx, args) => {
     const words = cleanWords(args.words);
@@ -122,6 +145,9 @@ export const generateStory = action({
             "- each sentence follows on from the one before, using he/she/it/they to refer back.",
             "Use the target words where they fit naturally; it is fine if a sentence has none.",
             'Example with words "big, run, one": "Sam has one little dog." "The dog sees a big ball." "It can run to the ball." "Sam and the dog play." "They are very happy."',
+            'Also add "picture": a SIMPLE description (max 25 words) of one scene for an illustrator.',
+            "At most two characters and one object, big in the middle, on a simple background. No names.",
+            'Describe each by species, size and colour (e.g. "a small brown dog", "a boy in a red T-shirt") and one clear action.',
           ].join("\n")
         : "Write 4 separate example sentences. Each one should use at least one target word.";
     const system = [
@@ -129,7 +155,9 @@ export const generateStory = action({
       "Rules: every sentence has at most 8 words.",
       "Apart from the target words, use only very common, easy words (cat, dog, mum, dad, big, red, run, sit...).",
       "Present tense. Friendly and child-safe.",
-      'Reply ONLY with JSON like {"sentences":["...","..."]}.',
+      args.kind === "story"
+        ? 'Reply ONLY with JSON like {"sentences":["...","..."],"picture":"..."}.'
+        : 'Reply ONLY with JSON like {"sentences":["...","..."]}.',
     ].join(" ");
     const user = `${task}\nTarget words: ${words.join(", ")}${
       args.level ? `\nLevel: ${args.level} (1 = easiest)` : ""
@@ -144,7 +172,7 @@ export const generateStory = action({
       },
       body: JSON.stringify({
         model: MODEL,
-        max_tokens: 300,
+        max_tokens: 400,
         temperature: 0.9,
         messages: [
           { role: "system", content: system },
@@ -157,11 +185,13 @@ export const generateStory = action({
       throw new Error("Story Maker could not answer. Please try again.");
     }
     const data = await res.json();
-    const sentences = parseSentences(data?.choices?.[0]?.message?.content ?? "");
+    const { sentences, scene } = parseReply(data?.choices?.[0]?.message?.content ?? "");
     if (sentences.length === 0) {
       throw new Error("Story Maker could not answer. Please try again.");
     }
     const audio = await Promise.all(sentences.map(ttsDataUri));
-    return { sentences, audio };
+    const picture =
+      args.kind === "story" ? pictureUrl(scene ?? sentences.join(" ")) : null;
+    return { sentences, audio, picture };
   },
 });
