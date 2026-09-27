@@ -247,6 +247,12 @@ body.slide-fs .refJumps{display:none !important}
   align-items:center; min-height:180px}
 .slideStage img{width:100%; height:auto; display:block; max-height:74vh; object-fit:contain; cursor:zoom-in}
 .slideControls{display:flex; flex-wrap:wrap; gap:10px; align-items:center; justify-content:center; margin-top:14px}
+.videoFrameWrap{
+  background:#0f172a; border-radius:18px; overflow:hidden;
+  width:100%; max-width:1100px; margin:0 auto; aspect-ratio:16/9;
+}
+.videoFrameWrap iframe{display:block; width:100%; height:100%; border:0}
+.videoHint{text-align:center; color:#5b527d; font-size:15px; margin:10px auto 0; max-width:620px}
 .slideFsExit{
   display:none; position:absolute; top:12px; right:12px; z-index:6;
   cursor:pointer; border:none; font-family:inherit; font-weight:bold; font-size:16px; color:#fff;
@@ -294,6 +300,7 @@ body.slide-fs #teachView{
   position:fixed; inset:0; z-index:8000; max-width:none; padding:0; margin:0; background:#0f172a;
 }
 body.slide-fs #slideshow{height:100%}
+body.slide-fs #videoStage{display:none !important}
 
 /* Word Shooter embed */
 .gameFrameWrap{
@@ -367,9 +374,10 @@ footer{text-align:center; color:#4b3f7a; font-weight:bold; margin-top:20px}
 
 <!-- TEACH VIEW: the lesson slides + YES 2026 reference booklet -->
 <div id="teachView" class="wrap">
-  <div class="setbar teachSwitch" role="tablist" aria-label="Lesson slides or YES 2026 booklet">
+  <div class="setbar teachSwitch" role="tablist" aria-label="Lesson slides, YES 2026 booklet or lesson video">
     <button type="button" class="setBtn active" id="deckSlides" role="tab" aria-selected="true">📚 Lesson slides</button>
     <button type="button" class="setBtn" id="deckRef" role="tab" aria-selected="false">📄 YES 2026 booklet</button>
+    <button type="button" class="setBtn" id="deckVideo" role="tab" aria-selected="false">🎬 Lesson video</button>
     <a class="btn ghost" id="refOpenPdf" href="YES_2026_V2.pdf" target="_blank" rel="noopener" style="display:none; text-decoration:none">↗️ Open PDF</a>
   </div>
   <div class="setbar refJumps" id="refJumps" role="group" aria-label="Jump to booklet section" style="display:none"></div>
@@ -377,6 +385,14 @@ footer{text-align:center; color:#4b3f7a; font-weight:bold; margin-top:20px}
     <button type="button" class="slideFsExit" id="slideFsExit" title="Exit full screen" aria-label="Exit full screen">✕ Exit</button>
     <div class="slideStage">
       <img id="slideImg" alt="Teaching slide" title="Click to show the slide full screen" />
+    </div>
+    <div id="videoStage" style="display:none">
+      <div class="videoFrameWrap" id="videoFrameWrap"></div>
+      <div class="slideControls">
+        <a class="btn ghost" id="videoOpenYt" href="#" target="_blank" rel="noopener" style="text-decoration:none">↗️ Open on YouTube</a>
+        <button class="btn sun" id="videoToPlay">🎮 Let's Play!</button>
+      </div>
+      <p class="videoHint">Watch it together to teach the words, then play it again at the end to recap.</p>
     </div>
     <div class="slideControls">
       <button class="btn ghost" id="slidePrev">◀ Back</button>
@@ -1581,6 +1597,8 @@ const REF_JUMPS = [
   {label:'U1', i:13}, {label:'U2', i:14}, {label:'U3', i:15}, {label:'U4', i:16}
 ];
 const REF_START = 5;   // "Level 3 — Extending"
+/* One lesson video per level — paste the YouTube id here (blank hides the tab). */
+const LESSON_VIDEO = { id:'M5UCz5h1WWM', title:'Level 3 - Word Safari lesson video' };
 let teachDeck = 'slides';
 let slideIdx = 0;
 let refIdx = REF_START;
@@ -1588,6 +1606,7 @@ function deckList(){ return teachDeck==='ref' ? REF_PAGES : SLIDES; }
 function deckIdx(){ return teachDeck==='ref' ? refIdx : slideIdx; }
 function setDeckIdx(n){ if(teachDeck==='ref') refIdx=n; else slideIdx=n; }
 function showSlide(){
+  if(teachDeck==='video') return;
   const list = deckList();
   const i = deckIdx();
   $('#slideImg').src = list[i] || '';
@@ -1607,19 +1626,41 @@ function showSlide(){
     b.classList.toggle('active', teachDeck==='ref' && i>=ji && i<end);
   });
 }
+function playLessonVideo(){
+  if(!LESSON_VIDEO.id || $('#videoFrameWrap').firstChild) return;
+  const src = `https://www.youtube-nocookie.com/embed/${LESSON_VIDEO.id}?rel=0&modestbranding=1&playsinline=1`;
+  $('#videoFrameWrap').innerHTML =
+    `<iframe src="${src}" title="${LESSON_VIDEO.title}" loading="lazy"
+       referrerpolicy="strict-origin-when-cross-origin"
+       allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+       allowfullscreen></iframe>`;
+}
+function stopLessonVideo(){ $('#videoFrameWrap').innerHTML = ''; }
 function setTeachDeck(deck){
+  if(deck==='video' && !LESSON_VIDEO.id) deck = 'slides';
   teachDeck = deck;
   const ref = deck==='ref';
-  $('#deckSlides').classList.toggle('active', !ref);
+  const vid = deck==='video';
+  $('#deckSlides').classList.toggle('active', deck==='slides');
   $('#deckRef').classList.toggle('active', ref);
-  $('#deckSlides').setAttribute('aria-selected', ref ? 'false' : 'true');
+  $('#deckVideo').classList.toggle('active', vid);
+  $('#deckSlides').setAttribute('aria-selected', deck==='slides' ? 'true' : 'false');
   $('#deckRef').setAttribute('aria-selected', ref ? 'true' : 'false');
+  $('#deckVideo').setAttribute('aria-selected', vid ? 'true' : 'false');
   $('#refJumps').style.display = ref ? 'flex' : 'none';
   $('#refOpenPdf').style.display = ref ? 'inline-flex' : 'none';
+  $('.slideStage').style.display = vid ? 'none' : 'flex';
+  $('#slideshow .slideControls').style.display = vid ? 'none' : 'flex';
+  $('#videoStage').style.display = vid ? 'block' : 'none';
+  if(vid) playLessonVideo(); else stopLessonVideo();
   showSlide();
 }
 $('#deckSlides').onclick = ()=>{ setTeachDeck('slides'); sfx.pop(); };
 $('#deckRef').onclick = ()=>{ setTeachDeck('ref'); sfx.pop(); };
+$('#deckVideo').onclick = ()=>{ setTeachDeck('video'); sfx.pop(); };
+$('#videoToPlay').onclick = ()=>setMode('play');
+$('#videoOpenYt').href = LESSON_VIDEO.id ? `https://youtu.be/${LESSON_VIDEO.id}` : '#';
+if(!LESSON_VIDEO.id) $('#deckVideo').style.display = 'none';
 $('#refJumps').innerHTML = REF_JUMPS.map(j=>`<button type="button" class="setBtn" data-i="${j.i}">${j.label}</button>`).join('');
 $('#refJumps').onclick = e=>{
   const b = e.target.closest('.setBtn');
@@ -1699,8 +1740,8 @@ function setMode(mode){
   $('#modeTeach').setAttribute('aria-selected', teach?'true':'false');
   $('#modePlay').setAttribute('aria-selected', !teach?'true':'false');
   $('#pickFab').style.display = teach ? 'none' : 'block';
-  if(!teach){ setPicker(false); exitSlideFs(); }
-  if(teach) showSlide();
+  if(!teach){ setPicker(false); exitSlideFs(); stopLessonVideo(); }
+  if(teach){ if(teachDeck==='video') playLessonVideo(); showSlide(); }
   window.scrollTo({top:0});
 }
 $('#modeTeach').onclick = ()=>setMode('teach');
