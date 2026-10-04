@@ -226,6 +226,12 @@ body.audio-off #aTarget{display:block}
 #pickPanel .row{gap:8px}
 #pickPanel .btn{font-size:15px; padding:10px 14px}
 @media (prefers-reduced-motion: reduce){ #pickPanel.open{animation:none} }
+/* On wide screens, make room for the open picker so it doesn't cover the activity */
+@media (min-width:1000px){
+  body{transition:padding-right .18s ease-out}
+  body.picker-open:not(.slide-fs){padding-right:416px}
+}
+@media (prefers-reduced-motion: reduce){ body{transition:none} }
 
 /* Teach / Play mode tabs */
 .modebar{display:flex; gap:10px; justify-content:center; margin-top:16px}
@@ -1520,6 +1526,7 @@ setActiveClass(activeClass);   // initial build for the saved/default class
 function setPicker(open){
   const panel=$('#pickPanel'), fab=$('#pickFab');
   panel.classList.toggle('open', open);
+  document.body.classList.toggle('picker-open', open);
   panel.setAttribute('aria-hidden', open?'false':'true');
   fab.setAttribute('aria-expanded', open?'true':'false');
   fab.textContent = open ? '🎯 Hide picker' : '🎯 Pick a Pupil';
