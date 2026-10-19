@@ -1,2 +1,5 @@
 *.pdf
+!YES_2026_V2.pdf
 _slides/
+*.mp4
+*.xlsx
